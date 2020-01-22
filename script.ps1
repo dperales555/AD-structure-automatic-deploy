@@ -74,15 +74,15 @@ function crearOU ($nombre, $rutaOU, $descripcion, $ruta, $padre) {
 #Funcion crear un usuario y aadirlo a su respectivo grupo
 function crearUsuario ($usuario, $nivel, $rutaOU) {
 
-    #Se crean dos variables, una que almacenará el login del usuario y otra que almacenará el dominio. Juntas formarán el nombre completamente cualificado del usuario
+    #Se crean dos variables, una que almacenará el username del usuario y otra que almacenará el dominio. Juntas formarán el nombre completamente cualificado del usuario
     $domain = ($dc.Substring(3)).replace(",DC=",".").toLower()
 
-    if (Get-ADUser -Filter "name -eq '$login'" -SearchBase $rutaOU) { #Si el usuario existe, omite
+    if (Get-ADUser -Filter "name -eq '$usuario'" -SearchBase $rutaOU) { #Si el usuario existe, omite
 	    Write-Host -ForegroundColor Yellow "El usuario $($usuario) ya existe. Se omitirá este paso"
     } else { #Sino, lo crea y lo añade a su respectivo grupo
         try {
             Write-Host "Creando usuario $($usuario) ...."
-            New-ADUser -Name $login -Path $rutaOU -SamAccountName $login -UserPrincipalName "$login@$domain" -AccountPassword (ConvertTo-SecureString "P@`$`$w0rd" -AsPlainText -Force) -GivenName $login -ChangePasswordAtLogon $true -Enabled $true
+            New-ADUser -Name $usuario -Path $rutaOU -SamAccountName $usuario -UserPrincipalName "$usuario@$domain" -AccountPassword (ConvertTo-SecureString "P@`$`$w0rd" -AsPlainText -Force) -GivenName $usuario -ChangePasswordAtLogon $true -Enabled $true
             Write-Host -ForegroundColor Green "¡Usuario $($usuario) creado correctamente!"
         } catch {
             return Write-Host -ForegroundColor Red $_.Exception
@@ -93,7 +93,7 @@ function crearUsuario ($usuario, $nivel, $rutaOU) {
         if ($grupo) { #Si el grupo existe, añade el usuario al grupo
             try {
                 Write-Host "Uniendo a $($usuario) al grupo $($grupo.name) ...."
-                $member = "CN=$login,$rutaOU" #Almacena la ruta del usuario
+                $member = "CN=$usuario,$rutaOU" #Almacena la ruta del usuario
                 Add-ADGroupMember $grupo -Members $member
             } catch {
                 return Write-Host -ForegroundColor Red $_.Exception
@@ -104,8 +104,11 @@ function crearUsuario ($usuario, $nivel, $rutaOU) {
     }
 
     #Crea la carpeta del usuario y de su perfil móvil
-    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$login" -permisos "/GRANT $($login):'(OI)(CI)F'"
-    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$login" -permisos "/GRANT $($login):'(OI)(CI)F'"
+    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'"
+    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'"
+
+    #Asigna al usuario una unidad de red mapeada a su carpeta particular y asigna la ruta a su perfil móvil
+    Set-ADUser -Identity $usuario -HomeDirectory "\\$($env:computername)\$($linea.nivel1)_USERS$\$usuario" -HomeDrive "Z:" -ProfilePath "\\$($env:computername)\$($linea.nivel1)_PROFILES$\$usuario"
 }
 
 #Función para crear la estructura de carpetas
@@ -213,9 +216,6 @@ function iterarAchivo($activeDirectory) {
                 } else { #Crea un usuario de nivel 3
                     crearUsuario -usuario $login -nivel $($linea.nivel3) -rutaOU "OU=$($linea.nivel3),OU=$($linea.nivel2),OU=$($linea.nivel1),$($dc)"
                 }
-            } else {
-                #Asigna al usuario una unidad de red mapeada a su carpeta particular y asigna la ruta a su perfil móvil
-                Set-ADUser -Identity $login -HomeDirectory "\\$($env:computername)\$($linea.nivel1)_USERS$\$login" -HomeDrive "Z:" -ProfilePath "\\$($env:computername)\$($linea.nivel1)_PROFILES$\$login"
             }
         }
 
