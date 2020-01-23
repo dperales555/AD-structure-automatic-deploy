@@ -134,7 +134,7 @@ function crearCarpeta ($ruta, $permisos, $recursoCompartido) {
         #Comprueba si la carpeta ya está compartida, sino la comparte
         if ($recursoCompartido -and -not (Get-SMBShare -name $recursoCompartido -erroraction "silentlycontinue")) { #Se comprueba si el recurso está compartido, sino lo comparte
             Write-Host "Compartiendo $recursoCompartido ..."
-            New-SMBShare -name $recursoCompartido -Path $ruta -FullAccess "Administrador", "Admins. del dominio" #-ChangeAccess $linea.nivel1
+            New-SMBShare -name $recursoCompartido -Path $ruta -FullAccess "Administrador", "Admins. del dominio" <#-ChangeAccess "Administrador", "Admins. del dominio"#> | Out-Null
             Write-Host -ForegroundColor Green "¡$recursoCompartido compartido correctamente!"
         } else {
             Write-Host -ForegroundColor Yellow "El recurso $recursoCompartido ya ha sido compartido. Se omitirá este paso"
@@ -158,18 +158,18 @@ function iterarAchivo($activeDirectory) {
                 crearOU -nombre $linea.nivel1 -rutaOU $dc -descripcion $linea.nivel1_descripcion
             } else {
                 #Crea un array para almacenar los permisos que se grabarán
-                $permisosTotales = @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(OI)(CI)R'", "/GRANT $($linea.nivel1):'W'")
+                $permisosTotales = @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(OI)(CI)(GR,RD,RA,REA)'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,WD,AD,WEA)'")
 
                 #Para cada grupo de nivel 3 perteneciente al grupo de nivel 2 se añadirá una denegación explícita de la escritura
                 $subGrupos = Get-ADGroupMember $linea.nivel1 | Where-Object objectClass -eq "group"
                 foreach ($grupo in $subGrupos) {
-                    $permisosTotales += ,@("/DENY $($grupo.name):'(GW)'")
+                    $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WEA)'")
                 }
 
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)" -permisos $permisosTotales -recursoCompartido "$($linea.nivel1)_COMPANY"
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'R'") -recursoCompartido "$($linea.nivel1)_USERS$"
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'R'") -recursoCompartido "$($linea.nivel1)_PROFILES$"
-                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'R'") -recursoCompartido "$($linea.nivel1)_FOLDERS$"
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_USERS$"
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_PROFILES$"
+                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_FOLDERS$"
             }
 	    }
 
@@ -179,12 +179,12 @@ function iterarAchivo($activeDirectory) {
                 crearOU -nombre $linea.nivel2 -rutaOU "OU=$($linea.nivel1),$($dc)" -descripcion $linea.nivel2_descripcion -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)" -padre $linea.nivel1
             } else {
                 #Crea un array para almacenar los permisos que se grabarán
-                $permisosTotales = @("/GRANT $($linea.nivel2):RW")
+                $permisosTotales = @("/GRANT $($linea.nivel2):'(GR,RD,RA,REA,WD,AD,WEA)'")
 
                 #Para cada grupo de nivel 3 perteneciente al grupo de nivel 2 se añadirá una denegación explícita de la escritura
                 $subGrupos = Get-ADGroupMember $linea.nivel2 | Where-Object objectClass -eq "group"
                 foreach ($grupo in $subGrupos) {
-                    $permisosTotales += ,@("/DENY $($grupo.name):'(GW)'")
+                    $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WEA)'")
                 }
 
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)" -permisos $permisosTotales
@@ -196,7 +196,7 @@ function iterarAchivo($activeDirectory) {
             if ($activeDirectory) {
                 crearOU -nombre $linea.nivel3 -rutaOU "OU=$($linea.nivel2),OU=$($linea.nivel1),$($dc)" -descripcion $linea.nivel3_descripcion -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel3)" -padre $linea.nivel2
             } else {
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)\$($linea.nivel3)" -permisos @("/GRANT $($linea.nivel3):RW")
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)\$($linea.nivel3)" -permisos @("/GRANT $($linea.nivel3):'(GR,RD,RA,REA,WD,AD,WEA)'")
             }
         } 
 
