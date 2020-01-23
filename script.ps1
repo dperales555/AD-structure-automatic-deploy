@@ -104,15 +104,15 @@ function crearUsuario ($usuario, $nivel, $rutaOU) {
     }
 
     #Crea la carpeta del usuario y de su perfil móvil
-    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'"
-    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'"
+    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'" -nivel1 $linea.nivel1
+    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'" -nivel1 $linea.nivel1
 
     #Asigna al usuario una unidad de red mapeada a su carpeta particular y asigna la ruta a su perfil móvil
     Set-ADUser -Identity $usuario -HomeDirectory "\\$($env:computername)\$($linea.nivel1)_USERS$\$usuario" -HomeDrive "Z:" -ProfilePath "\\$($env:computername)\$($linea.nivel1)_PROFILES$\$usuario"
 }
 
 #Función para crear la estructura de carpetas
-function crearCarpeta ($ruta, $permisos, $recursoCompartido) {
+function crearCarpeta ($ruta, $permisos, $recursoCompartido, $nivel1) {
     try {
         
         #Comprueba si la carpeta ya existe, sino la crea
@@ -134,7 +134,7 @@ function crearCarpeta ($ruta, $permisos, $recursoCompartido) {
         #Comprueba si la carpeta ya está compartida, sino la comparte
         if ($recursoCompartido -and -not (Get-SMBShare -name $recursoCompartido -erroraction "silentlycontinue")) { #Se comprueba si el recurso está compartido, sino lo comparte
             Write-Host "Compartiendo $recursoCompartido ..."
-            New-SMBShare -name $recursoCompartido -Path $ruta -FullAccess "Administrador", "Admins. del dominio" <#-ChangeAccess "Administrador", "Admins. del dominio"#> | Out-Null
+            New-SMBShare -name $recursoCompartido -Path $ruta -FullAccess "Administrador", "Admins. del dominio", $nivel1 <#-ChangeAccess "Administrador", "Admins. del dominio"#> | Out-Null
             Write-Host -ForegroundColor Green "¡$recursoCompartido compartido correctamente!"
         } else {
             Write-Host -ForegroundColor Yellow "El recurso $recursoCompartido ya ha sido compartido. Se omitirá este paso"
@@ -166,10 +166,10 @@ function iterarAchivo($activeDirectory) {
                     $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WEA)'")
                 }
 
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)" -permisos $permisosTotales -recursoCompartido "$($linea.nivel1)_COMPANY"
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_USERS$"
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_PROFILES$"
-                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_FOLDERS$"
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)" -permisos $permisosTotales -recursoCompartido "$($linea.nivel1)_COMPANY" -nivel1 $linea.nivel1
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_USERS$" -nivel1 $linea.nivel1
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_PROFILES$" -nivel1 $linea.nivel1
+                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_FOLDERS$" -nivel1 $linea.nivel1
             }
 	    }
 
@@ -187,7 +187,7 @@ function iterarAchivo($activeDirectory) {
                     $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WEA)'")
                 }
 
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)" -permisos $permisosTotales
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)" -permisos $permisosTotales -nivel1 $linea.nivel1
             }
 	    }
     
@@ -196,7 +196,7 @@ function iterarAchivo($activeDirectory) {
             if ($activeDirectory) {
                 crearOU -nombre $linea.nivel3 -rutaOU "OU=$($linea.nivel2),OU=$($linea.nivel1),$($dc)" -descripcion $linea.nivel3_descripcion -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel3)" -padre $linea.nivel2
             } else {
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)\$($linea.nivel3)" -permisos @("/GRANT $($linea.nivel3):'(GR,RD,RA,REA,WD,AD,WEA)'")
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)\$($linea.nivel3)" -permisos @("/GRANT $($linea.nivel3):'(GR,RD,RA,REA,WD,AD,WEA)'") -nivel1 $linea.nivel1
             }
         } 
 
