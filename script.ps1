@@ -104,11 +104,11 @@ function crearUsuario ($usuario, $nivel, $rutaOU) {
     }
 
     #Crea la carpeta del usuario y de su perfil móvil
-    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'" -nivel1 $linea.nivel1
-    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$usuario" -permisos "/GRANT $($usuario):'(OI)(CI)F'" -nivel1 $linea.nivel1
+    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$usuario" -permisos @("/GRANT $($usuario):'(OI)(CI)F'", "/DENY $($linea.nivel1):'(GR,RD,RA,REA)'") -nivel1 $linea.nivel1
+    crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$usuario" -permisos @("/GRANT $($usuario):'(OI)(CI)F'", "/DENY $($linea.nivel1):'(GR,RD,RA,REA)'") -nivel1 $linea.nivel1
 
     #Asigna al usuario una unidad de red mapeada a su carpeta particular y asigna la ruta a su perfil móvil
-    Set-ADUser -Identity $usuario -HomeDirectory "\\$($env:computername)\$($linea.nivel1)_USERS$\$usuario" -HomeDrive "Z:" -ProfilePath "\\$($env:computername)\$($linea.nivel1)_PROFILES$\$usuario"
+    Set-ADUser -Identity $usuario -HomeDirectory "\\$($env:computername)\$($linea.nivel1)_USERS$\$usuario" -HomeDrive "Z:" -ProfilePath "\\$($env:computername)\$($linea.nivel1)_PROFILES$\$usuario\$usuario"
 }
 
 #Función para crear la estructura de carpetas
@@ -134,7 +134,7 @@ function crearCarpeta ($ruta, $permisos, $recursoCompartido, $nivel1) {
         #Comprueba si la carpeta ya está compartida, sino la comparte
         if ($recursoCompartido -and -not (Get-SMBShare -name $recursoCompartido -erroraction "silentlycontinue")) { #Se comprueba si el recurso está compartido, sino lo comparte
             Write-Host "Compartiendo $recursoCompartido ..."
-            New-SMBShare -name $recursoCompartido -Path $ruta -FullAccess "Administrador", "Admins. del dominio", $nivel1 <#-ChangeAccess "Administrador", "Admins. del dominio"#> | Out-Null
+            New-SMBShare -name $recursoCompartido -Path $ruta -FullAccess "Administrador", "Admins. del dominio", $nivel1 | Out-Null
             Write-Host -ForegroundColor Green "¡$recursoCompartido compartido correctamente!"
         } else {
             Write-Host -ForegroundColor Yellow "El recurso $recursoCompartido ya ha sido compartido. Se omitirá este paso"
@@ -154,23 +154,21 @@ function iterarAchivo($activeDirectory) {
         #CREACIÓN DE OU's
         #Comprueba que la OU de nivel 1 requerida existe y tiene carpetas base, sino crea la OU y las carpetas base
         if ($linea.nivel1) {
-            if ($activeDirectory) {
-                crearOU -nombre $linea.nivel1 -rutaOU $dc -descripcion $linea.nivel1_descripcion
-            } else {
-                #Crea un array para almacenar los permisos que se grabarán
-                $permisosTotales = @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(OI)(CI)(GR,RD,RA,REA)'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,WD,AD,WEA)'")
+            crearOU -nombre $linea.nivel1 -rutaOU $dc -descripcion $linea.nivel1_descripcion
+            
+            #Crea un array para almacenar los permisos que se grabarán
+            $permisosTotales = @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(OI)(CI)(GR,RD,RA,REA)'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,WD,AD,WEA)'")
 
-                #Para cada grupo de nivel 3 perteneciente al grupo de nivel 2 se añadirá una denegación explícita de la escritura
-                $subGrupos = Get-ADGroupMember $linea.nivel1 | Where-Object objectClass -eq "group"
-                foreach ($grupo in $subGrupos) {
-                    $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WEA)'")
-                }
-
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)" -permisos $permisosTotales -recursoCompartido "$($linea.nivel1)_COMPANY" -nivel1 $linea.nivel1
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_USERS$" -nivel1 $linea.nivel1
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_PROFILES$" -nivel1 $linea.nivel1
-                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_FOLDERS$" -nivel1 $linea.nivel1
+            #Para cada grupo de nivel 3 perteneciente al grupo de nivel 2 se añadirá una denegación explícita de la escritura
+            $subGrupos = Get-ADGroupMember $linea.nivel1 | Where-Object objectClass -eq "group"
+            foreach ($grupo in $subGrupos) {
+                $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WEA)'")
             }
+
+            crearCarpeta -ruta "$($raiz)$($linea.nivel1)" -permisos $permisosTotales -recursoCompartido "$($linea.nivel1)_COMPANY" -nivel1 $linea.nivel1
+            crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_USERS$" -nivel1 $linea.nivel1
+            crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_PROFILES$" -nivel1 $linea.nivel1
+            #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_FOLDERS$" -nivel1 $linea.nivel1
 	    }
 
         #Comprueba que la OU de nivel 2 requerida existe y tiene carpeta, sino crea la OU y la carpeta
