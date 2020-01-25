@@ -1,4 +1,6 @@
-﻿$letterdrive = Get-SmbMapping | Where-Object {$_.LocalPath -like 'Z:'} | Select-Object LocalPath # => Z:
+﻿### CREAMOS UNA CARPETA tmp EN LA CARPETA PERSONAL DE CADA USUARIO (Z:) Y MAPEAMOS GOOGLE_COMPANY EN G: ###
+
+$letterdrive = Get-SmbMapping | Where-Object {$_.LocalPath -like 'Z:'} | Select-Object LocalPath # => Z:
 
 # Función para obtener un string aleatorio
 function randomString() {
