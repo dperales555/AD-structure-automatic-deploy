@@ -1,23 +1,36 @@
-﻿### CREAMOS UNA CARPETA tmp EN LA CARPETA PERSONAL DE CADA USUARIO (Z:) Y MAPEAMOS GOOGLE_COMPANY EN G: ###
+﻿###CREAMOS UNA CARPETA tmp EN LA CARPETA PERSONAL DE CADA USUARIO (Z:) Y MAPEAMOS GOOGLE_COMPANY EN G: ###
 
-$letterdrive = Get-SmbMapping | Where-Object {$_.LocalPath -like 'Z:'} | Select-Object LocalPath # => Z:
+#Comprobamos si el equipo forma parte de un dominio
+if ((Get-WmiObject Win32_ComputerSystem).PartOfDomain) {
 
-# Función para obtener un string aleatorio
-function randomString() {
-    return [System.Guid]::NewGuid().ToString()
-}
+    #Comprueba si Z: existe
+    if (Get-SmbMapping | Where-Object {$_.LocalPath -eq "Z:"}) {
+        #Creamos la carpeta "tmp"
+        New-Item -Path "Z:\tmp" -ItemType Directory -Force
 
-# Comprueba si Z: existe
-if ($letterdrive) {
-    New-Item -Path "Z:\tmp" -ItemType Directory -Force
-}
+        #Función para obtener un string aleatorio
+        function stringAleatorio() {
+            return [System.Guid]::NewGuid().ToString()
+        }
 
-# Creamos 3 carpetas aleatorias dentro de Z:\tmp
-for ($i=1; $i -le 3; $i++) {
-    New-Item -Type Directory -Path "Z:\tmp\$(randomstring)" -Force
-}
+        #Creamos 3 carpetas aleatorias en "Z:\tmp\"
+        for ($i=1; $i -le 3; $i++) {
+            New-Item -Type Directory -Path "Z:\tmp\$(stringAleatorio)" -Force
+        }
+    }
 
-# Mapeamos la unidad G: con GOOGLE_COMPANY
-if(Test-Path \\Serverws2016\google_company) {
-    New-SmbMapping -LocalPath 'G:' -RemotePath '\\Serverws2016\google_company'
+    #Almacenamos el FQDN del controlador de dominio
+    $fqdn = (Get-WmiObject Win32_ComputerSystem).Domain
+
+    #Obtenemos la IP del controlador del dominio
+    $ip = [System.Net.Dns]::GetHostByName($fqdn).AddressList.IPAddressToString | Select-Object -first 1
+    
+    #Resolvemos el nombre de host del controlador del dominio
+    $hostname = (Resolve-DnsName -Name $ip).NameHost
+
+    #Comprobamos si el recurso acabado en "_COMPANY" es accesible
+    if(Test-Path "\\$hostname\GOOGLE_COMPANY") { #FALTA CAMBIAR "GOOGLE" POR *
+        #Mapeamos la unidad G: con el recurso compartido "GOOGLE_COMPANY"
+        New-SmbMapping -LocalPath "G:" -RemotePath "\\$($hostname)\GOOGLE_COMPANY" #FALTA CAMBIAR "GOOGLE" POR *
+    }
 }
