@@ -1,6 +1,4 @@
-﻿###CREAMOS UNA CARPETA tmp EN LA CARPETA PERSONAL DE CADA USUARIO (Z:) Y MAPEAMOS GOOGLE_COMPANY EN G: ###
-
-#Comprobamos si el equipo forma parte de un dominio
+﻿#Comprobamos si el equipo forma parte de un dominio
 if ((Get-WmiObject Win32_ComputerSystem).PartOfDomain) {
 
     #Comprueba si Z: existe
@@ -28,9 +26,12 @@ if ((Get-WmiObject Win32_ComputerSystem).PartOfDomain) {
     #Resolvemos el nombre de host del controlador del dominio
     $hostname = (Resolve-DnsName -Name $ip).NameHost
 
+    #Obtenemos el nombre del recurso compartido
+    $recurso = Get-SmbConnection -ServerName $hostname | Select-Object -ShareName | Where-Object {$_.ShareName -endswith "_COMPANY"}
+
     #Comprobamos si el recurso acabado en "_COMPANY" es accesible
-    if(Test-Path "\\$hostname\GOOGLE_COMPANY") { #FALTA CAMBIAR "GOOGLE" POR *
-        #Mapeamos la unidad G: con el recurso compartido "GOOGLE_COMPANY"
-        New-SmbMapping -LocalPath "G:" -RemotePath "\\$($hostname)\GOOGLE_COMPANY" #FALTA CAMBIAR "GOOGLE" POR *
+    if($recurso) {
+        #Mapeamos la unidad G: con el recurso compartido "*_COMPANY"
+        New-SmbMapping -LocalPath "G:" -RemotePath "\\$($hostname)\$($recurso)"
     }
 }
