@@ -1,13 +1,7 @@
+#Obtiene el fichero CSV como parámetro proporcionado por el usuario
 param (
-
     [string]$archivo = $(Read-Host "Indica la ruta al fichero .csv con los datos de la estructura")
-
 )
-
-#Comprueba si se han proporcionado un archivo .csv y es válido
-if (-not $archivo -or -not $archivo.endsWith(".csv")) {
-    return Write-Host -ForegroundColor Red "Error de sintaxis. Debes proporcionar un archivo .csv válido"
-}
 
 #Obtiene información sobre el sistema operativo, para posteriormente evaluar su tipo de producto
 $infoSO = Get-CimInstance -ClassName Win32_OperatingSystem
@@ -17,8 +11,10 @@ if ($infoSO.ProductType -ne 2) {
     return Write-Host -ForegroundColor Red "Este dispositivo no es un controlador de dominio"
 }
 
-#Almacena el nombre distinguido del controlador de dominio
-$dc = Get-ADDomain | Select-Object -ExpandProperty DistinguishedName
+#Comprueba si se han proporcionado un archivo .csv y es válido
+if (-not $archivo -or -not $archivo.endsWith(".csv")) {
+    return Write-Host -ForegroundColor Red "Error de sintaxis. Debes proporcionar un archivo .csv válido"
+}
 
 #Importa el archivo .csv con los datos de la estructura
 try {
@@ -27,9 +23,11 @@ try {
     return Write-Host -ForegroundColor Red $_.Exception.Message
 }
 
-$raiz = "C:\"
+#Almacena el nombre distinguido del controlador de dominio
+$dc = Get-ADDomain | Select-Object -ExpandProperty DistinguishedName
 
 #Comprueba si C:\ existe y en caso negativo, la raiz será la unidad desde la que se ejecuta el script
+$raiz = "C:\"
 if (-not (Test-Path $raiz)) {
     $raiz = (Get-Item $(Get-Location)).PSDrive.Name + ':\'
 }
@@ -151,18 +149,18 @@ function iterarAchivo($activeDirectory) {
                 crearOU -nombre $linea.nivel1 -rutaOU $dc -descripcion $linea.nivel1_descripcion
             } else {
                 #Crea un array para almacenar los permisos que se grabarán
-                $permisosTotales = @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(OI)(CI)(GR,RD,RA,REA)'", "/GRANT $($linea.nivel1):'(WD,AD,WA,WEA,DE,DC,X)'")
+                $permisosTotales = @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(OI)(CI)(GR,RD,RA,REA,S)'", "/GRANT $($linea.nivel1):'(WD,AD,WA,WEA,DE,DC,X)'")
 
                 #Para cada grupo de nivel 3 perteneciente al grupo de nivel 2 se añadirá una denegación explícita de la escritura
                 $subGrupos = Get-ADGroupMember $linea.nivel1 | Where-Object objectClass -eq "group"
                 foreach ($grupo in $subGrupos) {
-                    $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WA,WEA,DE,DC,X)'")
+                    $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WA,WEA,DE,DC,X,S)'")
                 }
 
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)" -permisos $permisosTotales -recursoCompartido "$($linea.nivel1)_COMPANY" -nivel1 $linea.nivel1
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_USERS$" -nivel1 $linea.nivel1
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_PROFILES$" -nivel1 $linea.nivel1
-                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA)'") -recursoCompartido "$($linea.nivel1)_FOLDERS$" -nivel1 $linea.nivel1
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,S)'") -recursoCompartido "$($linea.nivel1)_USERS$" -nivel1 $linea.nivel1
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,S)'") -recursoCompartido "$($linea.nivel1)_PROFILES$" -nivel1 $linea.nivel1
+                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,S)'") -recursoCompartido "$($linea.nivel1)_FOLDERS$" -nivel1 $linea.nivel1
             }
 	    }
 
@@ -172,7 +170,7 @@ function iterarAchivo($activeDirectory) {
                 crearOU -nombre $linea.nivel2 -rutaOU "OU=$($linea.nivel1),$($dc)" -descripcion $linea.nivel2_descripcion -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)" -padre $linea.nivel1
             } else {
                 #Crea un array para almacenar los permisos que se grabarán
-                $permisosTotales = @("/GRANT $($linea.nivel2):'(GR,RD,RA,REA,WD,AD,WA,WEA,DE,DC,X)'")
+                $permisosTotales = @("/GRANT $($linea.nivel2):'(GR,RD,RA,REA,WD,AD,WA,WEA,DE,DC,X,S)'")
 
                 #Para cada grupo de nivel 3 perteneciente al grupo de nivel 2 se añadirá una denegación explícita de la escritura
                 $subGrupos = Get-ADGroupMember $linea.nivel2 | Where-Object objectClass -eq "group"
@@ -189,7 +187,7 @@ function iterarAchivo($activeDirectory) {
             if ($activeDirectory) {
                 crearOU -nombre $linea.nivel3 -rutaOU "OU=$($linea.nivel2),OU=$($linea.nivel1),$($dc)" -descripcion $linea.nivel3_descripcion -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel3)" -padre $linea.nivel2
             } else {
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)\$($linea.nivel3)" -permisos @("/GRANT $($linea.nivel3):'(GR,RD,RA,REA,WD,AD,WA,WEA,DE,DC,X)'") -nivel1 $linea.nivel1
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)\$($linea.nivel3)" -permisos @("/GRANT $($linea.nivel3):'(GR,RD,RA,REA,WD,AD,WA,WEA,DE,DC,X,S)'") -nivel1 $linea.nivel1
             }
         } 
 
@@ -211,9 +209,9 @@ function iterarAchivo($activeDirectory) {
                 }
             } else {
                 #Crea la carpeta del usuario y de su perfil móvil
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$login" -permisos "/GRANT $($login):'(OI)(CI)(F,GR,RD,RA,REA)'" -nivel1 $linea.nivel1
-                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$login" -permisos "/GRANT $($login):'(OI)(CI)(F,GR,RD,RA,REA)'" -nivel1 $linea.nivel1
-                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS\$login" -permisos "/GRANT $($login):'(OI)(CI)(F,GR,RD,RA,REA)'" -nivel1 $linea.nivel1
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS\$login" -permisos "/GRANT $($login):'(OI)(CI)(F,GR,RD,RA,REA,S)'" -nivel1 $linea.nivel1
+                crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES\$login" -permisos "/GRANT $($login):'(OI)(CI)(F,GR,RD,RA,REA,S)'" -nivel1 $linea.nivel1
+                #crearCarpeta -ruta "$($raiz)$($linea.nivel1)_FOLDERS\$login" -permisos "/GRANT $($login):'(OI)(CI)(F,GR,RD,RA,REA,S)'" -nivel1 $linea.nivel1
 
                 #Asigna al usuario una unidad de red mapeada a su carpeta particular y asigna la ruta a su perfil móvil
                 Set-ADUser -Identity $login -HomeDirectory "\\$($env:computername)\$($linea.nivel1)_USERS$\$login" -HomeDrive "Z:" -ProfilePath "\\$($env:computername)\$($linea.nivel1)_PROFILES$\$login\$login"
