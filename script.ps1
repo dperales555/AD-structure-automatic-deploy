@@ -1,8 +1,3 @@
-#Obtiene el fichero CSV como parámetro proporcionado por el usuario
-param (
-    [string]$archivo = $(Read-Host "Indica la ruta al fichero .csv con los datos de la estructura")
-)
-
 #Obtiene información sobre el sistema operativo, para posteriormente evaluar su tipo de producto
 $infoSO = Get-CimInstance -ClassName Win32_OperatingSystem
 
@@ -11,12 +6,15 @@ if ($infoSO.ProductType -ne 2) {
     return Write-Host -ForegroundColor Red "Este dispositivo no es un controlador de dominio"
 }
 
-#Comprueba si se han proporcionado un archivo .csv y es válido
+#Obtiene el fichero CSV como parámetro proporcionado por el usuario
+$archivo = Read-Host "Indica la ruta al fichero .csv con los datos de la estructura"
+
+#Comprueba si se ha proporcionado un archivo .csv y es válido
 if (-not $archivo -or -not $archivo.endsWith(".csv")) {
     return Write-Host -ForegroundColor Red "Error de sintaxis. Debes proporcionar un archivo .csv válido"
 }
 
-#Importa el archivo .csv con los datos de la estructura
+#Importa el archivo .csv con los datos de la estructura, y si no es posible devuelve un error
 try {
     $csv = Import-CSV -Path $archivo
 } catch {
@@ -60,7 +58,7 @@ function crearOU ($nombre, $rutaOU, $descripcion, $ruta, $padre) {
             if ($padre) {
                 $grupoPadre = Get-ADGroup "CN=$padre,$rutaOU" #Obtiene el grupo padre
                 $grupoHijo = Get-ADGroup -Filter "name -eq '$nombre'" -SearchBase $rutaOU #Obtiene el grupo hijo
-                Add-ADGroupMember $grupoPadre -Members $grupoHijo
+                Add-ADGroupMember $grupoPadre -Members $grupoHijo #Añade el grupo hijo al grupo padre
                 Write-Host -ForegroundColor Green "¡Grupo $nombre añadido satisfactoriamente al grupo $padre!"
             }
         } catch {
@@ -72,7 +70,7 @@ function crearOU ($nombre, $rutaOU, $descripcion, $ruta, $padre) {
 #Funcion crear un usuario y aadirlo a su respectivo grupo
 function crearUsuario ($usuario, $nivel, $rutaOU) {
 
-    #Se crean dos variables, una que almacenará el username del usuario y otra que almacenará el dominio. Juntas formarán el nombre completamente cualificado del usuario
+    #Se crean una variable que almacenará la parte de dominio del fqdn del usuario
     $domain = ($dc.Substring(3)).replace(",DC=",".").toLower()
 
     if (Get-ADUser -Filter "name -eq '$usuario'" -SearchBase $rutaOU) { #Si el usuario existe, omite
@@ -86,13 +84,14 @@ function crearUsuario ($usuario, $nivel, $rutaOU) {
             return Write-Host -ForegroundColor Red $_.Exception
         }
 
-        $grupo = Get-ADGroup "CN=$nivel,$rutaOU" #Obtiene el grupo al que será añadido el nuevo usuario
+        #Obtiene el grupo al que será añadido el nuevo usuario
+        $grupo = Get-ADGroup "CN=$nivel,$rutaOU"
 
         if ($grupo) { #Si el grupo existe, añade el usuario al grupo
             try {
                 Write-Host "Uniendo a $($usuario) al grupo $($grupo.name) ...."
                 $member = "CN=$usuario,$rutaOU" #Almacena la ruta del usuario
-                Add-ADGroupMember $grupo -Members $member
+                Add-ADGroupMember $grupo -Members $member #Añade al usuario al grupo
             } catch {
                 return Write-Host -ForegroundColor Red $_.Exception
             }
@@ -112,9 +111,9 @@ function crearCarpeta ($ruta, $permisos, $recursoCompartido, $nivel1) {
             New-Item $ruta -ItemType "directory" | Out-Null #Se crea el directorio
             Write-Host -ForegroundColor Green "¡Directorio $ruta creado correctamente!"
             
-            #Asigna permisos locales
+            #Asigna todos los permisos locales permisos locales que se requieran
             Write-Host "Asignando permisos locales a $ruta ..." 
-            foreach ($perm in $permisos) {
+            foreach ($perm in $permisos) { #Para cada permiso en el array, hace un icacls
 	            Invoke-Expression -Command:"icacls $ruta $perm" | Out-Null
             }
             Write-Host -ForegroundColor Green "¡Permisos locales asignados correctamente a $ruta!"
@@ -136,13 +135,14 @@ function crearCarpeta ($ruta, $permisos, $recursoCompartido, $nivel1) {
 }
 
 #ITERACIÓN PARA CADA FILA DEL FICHERO .CSV
+#Si el modo de $activeDirectory está activado, solo se crea la estructura de unidades organizativos. En cambio si está desactivado, se replica la estructura de carpetas
 function iterarAchivo($activeDirectory) {
     $fila = 1 #Inicializa un contador para saber en que fila del .csv se encuentra el loop 
     foreach ($linea in $csv) {
     
         Write-Host "#$fila - - - - - - - - - - - - - - - - -"
 
-        #CREACIÓN DE OU's
+        #OU's
         #Comprueba que la OU de nivel 1 requerida existe y tiene carpetas base, sino crea la OU y las carpetas base
         if ($linea.nivel1) {
             if ($activeDirectory) {
@@ -157,6 +157,7 @@ function iterarAchivo($activeDirectory) {
                     $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WA,WEA,DE,DC,X,S)'")
                 }
 
+                #Se crean todas las carpetas base con sus respectivos permisos
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)" -permisos $permisosTotales -recursoCompartido "$($linea.nivel1)_COMPANY" -nivel1 $linea.nivel1
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)_USERS" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,S)'") -recursoCompartido "$($linea.nivel1)_USERS$" -nivel1 $linea.nivel1
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)_PROFILES" -permisos @("/inheritance:r", "/GRANT Administrador:'(OI)(CI)F'", "/GRANT 'Admins. del dominio:(OI)(CI)F'", "/GRANT $($linea.nivel1):'(GR,RD,RA,REA,S)'") -recursoCompartido "$($linea.nivel1)_PROFILES$" -nivel1 $linea.nivel1
@@ -166,7 +167,7 @@ function iterarAchivo($activeDirectory) {
 
         #Comprueba que la OU de nivel 2 requerida existe y tiene carpeta, sino crea la OU y la carpeta
         if ($linea.nivel2) {
-            if ($activeDirectory) {
+            if ($activeDirectory) { #Se crea la OU
                 crearOU -nombre $linea.nivel2 -rutaOU "OU=$($linea.nivel1),$($dc)" -descripcion $linea.nivel2_descripcion -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)" -padre $linea.nivel1
             } else {
                 #Crea un array para almacenar los permisos que se grabarán
@@ -177,21 +178,22 @@ function iterarAchivo($activeDirectory) {
                 foreach ($grupo in $subGrupos) {
                     $permisosTotales += ,@("/DENY $($grupo.name):'(WD,AD,WA,WEA,DE,DC,X)'")
                 }
-
+                
+                #Se crea la carpeta de la OU
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)" -permisos $permisosTotales -nivel1 $linea.nivel1
             }
 	    }
     
         #Comprueba que la OU de nivel 3 requerida existe y tiene carpeta, sino crea la OU y la carpeta
         if ($linea.nivel3) {
-            if ($activeDirectory) {
+            if ($activeDirectory) { #Se crea la OU
                 crearOU -nombre $linea.nivel3 -rutaOU "OU=$($linea.nivel2),OU=$($linea.nivel1),$($dc)" -descripcion $linea.nivel3_descripcion -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel3)" -padre $linea.nivel2
-            } else {
+            } else { #Se crea la carpeta de la OU
                 crearCarpeta -ruta "$($raiz)$($linea.nivel1)\$($linea.nivel2)\$($linea.nivel3)" -permisos @("/GRANT $($linea.nivel3):'(GR,RD,RA,REA,WD,AD,WA,WEA,DE,DC,X,S)'") -nivel1 $linea.nivel1
             }
         } 
 
-        #CREACIÓN DE USUARIOS
+        #USUARIOS
         if (-not $linea.nombre -and -not $linea.apellido1) { #Comprueba si es una línea que sirve para crear una OU y de ser así informa y omite
             Write-Host -ForegroundColor Yellow "No se creará ningún usuario en esta línea"
         } else { #En caso contrario, comprueba a que nivel pertenecerá el nuevo usuario
