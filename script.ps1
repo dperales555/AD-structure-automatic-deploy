@@ -82,7 +82,7 @@ function crearUsuario ($usuario, $nivel, $rutaOU) {
     } else { #Sino, lo crea y lo añade a su respectivo grupo
         try {
             Write-Host "Creando usuario $($usuario) ...."
-            New-ADUser -Name $usuario -Path $rutaOU -SamAccountName $usuario -UserPrincipalName "$usuario@$domain" -AccountPassword (ConvertTo-SecureString "P@`$`$w0rd" -AsPlainText -Force) -GivenName $usuario -ChangePasswordAtLogon $true -Enabled $true
+            New-ADUser -Name $usuario -Path $rutaOU -SamAccountName $usuario -UserPrincipalName "$usuario@$domain" -EmailAddress "$usuario@$domain" -AccountPassword (ConvertTo-SecureString "P@`$`$w0rd" -AsPlainText -Force) -GivenName $usuario -ChangePasswordAtLogon $true -Enabled $true
             Write-Host -ForegroundColor Green "¡Usuario $($usuario) creado correctamente!"
         } catch {
             return Write-Host -ForegroundColor Red $_.Exception
