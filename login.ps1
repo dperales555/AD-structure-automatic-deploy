@@ -34,5 +34,6 @@ if ((Get-WmiObject Win32_ComputerSystem).PartOfDomain) {
     if($recurso) {
         #Mapeamos la unidad G: con el recurso compartido "*_COMPANY"
         New-SmbMapping -LocalPath "G:" -RemotePath "\\$($hostname)\$($recurso)"
+        #New-SmbMapping -LocalPath "G:" -RemotePath "\\Serverws2016\$($recurso)"
     }
 }
