@@ -27,7 +27,8 @@ if ((Get-WmiObject Win32_ComputerSystem).PartOfDomain) {
     $hostname = (Resolve-DnsName -Name $ip).NameHost
 
     #Obtenemos el nombre del recurso compartido
-    $recurso = Get-SmbConnection -ServerName $hostname | Select-Object -ShareName | Where-Object {$_.ShareName -endswith "_COMPANY"}
+    #$recurso = Get-SmbConnection -ServerName $hostname | Select-Object -Property ShareName | Where-Object {$_.ShareName.endswith("_COMPANY")} #Problema de acceso denegado
+    $recurso = "GOOGLE_COMPANY"
 
     #Comprobamos si el recurso acabado en "_COMPANY" es accesible
     if($recurso) {
