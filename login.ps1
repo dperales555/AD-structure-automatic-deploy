@@ -28,6 +28,7 @@ if ((Get-WmiObject Win32_ComputerSystem).PartOfDomain) {
 
     #Obtenemos el nombre del recurso compartido
     #$recurso = Get-SmbConnection -ServerName $hostname | Select-Object -Property ShareName | Where-Object {$_.ShareName.endswith("_COMPANY")} | Select-Object -ExpandProperty ShareName #Problema de acceso denegado
+    # need of make it dynamic with global variable
     $recurso = "GOOGLE_COMPANY"
 
     #Comprobamos si el recurso acabado en "_COMPANY" es accesible
